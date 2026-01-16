@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#111827">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customizable Pomodoro Timer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-size: cover;
+            background-position: center;
+            transition: background-color 0.5s ease-in-out, background-image 0.5s ease-in-out;
+        }
+        .timer-display {
+            font-variant-numeric: tabular-nums;
+        }
+        /* Dark Mode styles */
+        body.dark { color: #f9fafb; }
+        .dark .bg-gray-800 { background-color: rgba(31, 41, 55, 0.8); backdrop-filter: blur(10px); }
+        .dark .text-gray-100 { color: #f9fafb; }
+        .dark .text-gray-200 { color: #e5e7eb; }
+        .dark .text-gray-300 { color: #d1d5db; }
+        .dark .text-blue-400 { color: #60a5fa; }
+        .dark .border-gray-700 { border-color: #374151; }
+        .dark .bg-gray-700 { background-color: #374151; }
+        .dark .bg-gray-600 { background-color: #4b5563; }
+        .dark .hover\:bg-gray-700:hover { background-color: #4b5563; }
+        .dark input, .dark select { color: #f9fafb; background-color: #374151; border-color: #4b5563;}
+
+        /* Light Mode styles */
+        body.light { color: #1f2937; }
+        .light .bg-gray-800 { background-color: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); }
+        .light .text-white { color: #1f2937; }
+        .light .text-gray-100 { color: #111827; }
+        .light .text-gray-200 { color: #374151; }
+        .light .text-gray-300 { color: #4b5563; }
+        .light .text-blue-400 { color: #3b82f6; }
+        .light .border-gray-700 { border-color: #d1d5db; }
+        .light .bg-gray-700 { background-color: #e5e7eb; }
+        .light .bg-gray-600 { background-color: #d1d5db; }
+        .light .hover\:bg-gray-700:hover { background-color: #d1d5db; }
+        .light input, .light select { color: #111827; background-color: #e5e7eb; border-color: #d1d5db;}
+
+        /* Toggle Switch */
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #2196F3; }
+        input:checked + .slider:before { transform: translateX(26px); }
+        
+    </style>
+</head>
+<body class="dark bg-gray-900">
+    <audio id="ocean-audio" src="https://cdn.pixabay.com/audio/2023/09/14/audio_5f251a1a1f.mp3" loop></audio>
+    
+    <div class="w-full max-w-md mx-auto p-4 relative z-10 flex items-center justify-center min-h-screen">
+      <div>
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-4xl sm:text-5xl font-bold text-gray-100">Timer</h1>
+            <label class="switch">
+                <input type="checkbox" id="dark-mode-toggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="bg-gray-800 p-8 rounded-full w-64 h-64 sm:w-80 sm:h-80 mx-auto flex flex-col items-center justify-center shadow-2xl mb-8 border-4 border-gray-700">
+            <p id="mode-display" class="text-xl sm:text-2xl font-semibold text-blue-400 mb-2">Ready</p>
+            <p id="timer-display" class="text-6xl sm:text-7xl font-bold timer-display">25:00</p>
+        </div>
+
+        <!-- Manual Timer Controls -->
+        <div id="manual-controls" class="space-y-4 mb-8">
+            <div class="flex items-center justify-center">
+                 <input type="number" id="time-input" class="w-32 text-center p-2 rounded-md border text-lg" value="25">
+                 <label for="time-input" class="ml-2 text-lg text-gray-300">minutes</label>
+            </div>
+            <div class="flex justify-center space-x-4 mt-4">
+                <button id="start-focus-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 shadow-lg">Start Focus</button>
+                <button id="start-break-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 shadow-lg">Start Break</button>
+            </div>
+        </div>
+        
+        <div id="active-controls" class="hidden text-center mb-8">
+             <button id="stop-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-12 rounded-lg transition duration-300 shadow-lg">Stop</button>
+        </div>
+        
+        <!-- Settings -->
+        <div class="mt-8">
+            <h2 class="text-2xl font-semibold text-center mb-4 text-gray-200">Settings</h2>
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg space-y-4">
+                <div class="flex flex-col sm:flex-row items-center justify-between">
+                    <label for="alarm-sound" class="font-medium text-gray-300 mb-2 sm:mb-0">Alarm Sound</label>
+                    <div class="flex items-center space-x-2 w-full sm:w-auto">
+                        <select id="alarm-sound" class="flex-grow sm:w-48 p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="beep">Beep</option>
+                            <option value="bell">Bell</option>
+                            <option value="chime">Chime</option>
+                        </select>
+                        <button id="preview-alarm-btn" class="p-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-white">▶️</button>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center justify-between">
+                    <label for="focus-sound" class="font-medium text-gray-300 mb-2 sm:mb-0">Focus Sound</label>
+                     <div class="flex items-center space-x-2 w-full sm:w-auto">
+                        <select id="focus-sound" class="flex-grow sm:w-48 p-2 rounded-md border focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="none">None</option>
+                            <option value="binaural">Binaural Beats (Headphones)</option>
+                            <option value="isochronic">Isochronic Tones</option>
+                            <option value="ocean">Ocean Waves</option>
+                        </select>
+                        <button id="preview-focus-btn" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white">▶️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        // --- Web Audio API Sound Generation ---
+        let audioContext;
+        let focusSoundNodes = null;
+        const oceanAudio = document.getElementById('ocean-audio');
+
+
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        function playAlarmSound(type) {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            if (type === 'beep') {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = 880;
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.5, now + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'bell') {
+                [880, 1046.50].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, now + i * 0.2);
+                    gain.gain.linearRampToValueAtTime(0.3, now + i * 0.2 + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.2 + 1.5);
+                    osc.start(now + i * 0.2);
+                    osc.stop(now + i * 0.2 + 1.5);
+                });
+            } else if (type === 'chime') {
+                 [1046.50, 1318.51, 1567.98].forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, now + i * 0.15);
+                    gain.gain.linearRampToValueAtTime(0.2, now + i * 0.15 + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.15 + 2);
+                    osc.start(now + i * 0.15);
+                    osc.stop(now + i * 0.15 + 2);
+                });
+            }
+        }
+        
+        function stopFocusSound() {
+            oceanAudio.pause();
+            oceanAudio.currentTime = 0;
+            if (focusSoundNodes) {
+                Object.values(focusSoundNodes).forEach(node => {
+                    if (node.stop) node.stop();
+                    node.disconnect();
+                });
+                focusSoundNodes = null;
+            }
+        }
+
+        function playFocusSound(type) {
+            stopFocusSound();
+            const ctx = getAudioContext();
+            const masterGain = ctx.createGain();
+            masterGain.gain.value = 0.15;
+            masterGain.connect(ctx.destination);
+            focusSoundNodes = { masterGain };
+
+            if (type === 'binaural') {
+                const merger = ctx.createChannelMerger(2);
+                merger.connect(masterGain);
+                
+                const left = ctx.createOscillator();
+                left.type = 'sine';
+                left.frequency.value = 136.1;
+                left.connect(merger, 0, 0);
+                left.start();
+                
+                const right = ctx.createOscillator();
+                right.type = 'sine';
+                right.frequency.value = 146.1;
+                right.connect(merger, 0, 1);
+                right.start();
+                
+                focusSoundNodes = { ...focusSoundNodes, left, right, merger };
+
+            } else if (type === 'isochronic') {
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.value = 180;
+                const gain = ctx.createGain();
+                
+                const lfo = ctx.createOscillator();
+                lfo.type = 'square';
+                lfo.frequency.value = 8;
+                lfo.connect(gain.gain);
+                
+                osc.connect(gain).connect(masterGain);
+                osc.start();
+                lfo.start();
+                focusSoundNodes = { ...focusSoundNodes, osc, lfo, gain };
+            } else if (type === 'ocean') {
+                 oceanAudio.volume = 0.5;
+                 oceanAudio.play();
+            }
+        }
+
+        // --- Background Art ---
+        const breakImageUrls = [
+            'https://images.unsplash.com/photo-1557682250-33bd709cbe85?q=80&w=2070&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1502691876148-a84978e59af8?q=80&w=2070&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?q=80&w=1912&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1536924940846-227afb31e2a5?q=80&w=2066&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1554034483-04fda0d3507b?q=80&w=2070&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1579547945413-497e1b991e75?q=80&w=2070&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?q=80&w=1887&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1557682224-5b8590cd9ec5?q=80&w=2029&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1500462918059-b1a0cb512f1d?q=80&w=1887&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1525127912910-c0c37ce389e8?q=80&w=1887&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=2070&auto=format&fit=crop'
+        ];
+        
+        function updateBackground(mode) {
+            const isDarkMode = document.body.classList.contains('dark');
+            document.body.style.backgroundImage = 'none';
+            document.body.classList.remove('bg-sky-600', 'bg-slate-100', 'bg-gray-900', 'bg-gray-100');
+
+            if (mode === 'Focus' || mode === 'Break') {
+                const randomImageUrl = breakImageUrls[Math.floor(Math.random() * breakImageUrls.length)];
+                document.body.style.backgroundImage = `url('${randomImageUrl}')`;
+            } else { // Ready state
+                document.body.classList.add(isDarkMode ? 'bg-gray-900' : 'bg-gray-100');
+            }
+        }
+
+        // DOM Elements
+        const timerDisplay = document.getElementById('timer-display');
+        const modeDisplay = document.getElementById('mode-display');
+        const timeInput = document.getElementById('time-input');
+        const startFocusBtn = document.getElementById('start-focus-btn');
+        const startBreakBtn = document.getElementById('start-break-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const manualControls = document.getElementById('manual-controls');
+        const activeControls = document.getElementById('active-controls');
+        const darkModeToggle = document.getElementById('dark-mode-toggle');
+        const alarmSoundSelect = document.getElementById('alarm-sound');
+        const previewAlarmBtn = document.getElementById('preview-alarm-btn');
+        const focusSoundSelect = document.getElementById('focus-sound');
+        const previewFocusBtn = document.getElementById('preview-focus-btn');
+
+        // State
+        let timer;
+        let isRunning = false;
+        let timeLeft;
+        let currentMode = 'Ready';
+
+        let settings = {
+            defaultTime: 25,
+            darkMode: true,
+            alarmSound: 'beep',
+            focusSound: 'none'
+        };
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            document.title = `${timerDisplay.textContent} - ${modeDisplay.textContent}`;
+        }
+
+        function toggleControls(showActive) {
+            manualControls.classList.toggle('hidden', showActive);
+            activeControls.classList.toggle('hidden', !showActive);
+        }
+
+        function startTimer(duration, mode) {
+            if (isRunning) return;
+            
+            currentMode = mode;
+            updateBackground(currentMode);
+
+            timeLeft = duration * 60;
+            if (isNaN(timeLeft) || timeLeft <= 0) {
+                alert("Please enter a valid time in minutes.");
+                return;
+            }
+
+            isRunning = true;
+            modeDisplay.textContent = mode;
+            updateTimerDisplay();
+            toggleControls(true);
+
+            if (mode === 'Focus') {
+                playFocusSound(settings.focusSound);
+            }
+
+            timer = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                if (timeLeft <= 0) {
+                    stopTimer(true);
+                }
+            }, 1000);
+        }
+
+        function stopTimer(playAlarm = false) {
+            if (!isRunning) return;
+            
+            clearInterval(timer);
+            isRunning = false;
+            
+            if (playAlarm) {
+                playAlarmSound(settings.alarmSound);
+            }
+            stopFocusSound();
+            
+            currentMode = 'Ready';
+            updateBackground(currentMode);
+
+            modeDisplay.textContent = 'Ready';
+            timeInput.value = settings.defaultTime;
+            timeLeft = settings.defaultTime * 60;
+            updateTimerDisplay();
+            toggleControls(false);
+        }
+        
+        function saveSettings() {
+            settings.darkMode = darkModeToggle.checked;
+            settings.alarmSound = alarmSoundSelect.value;
+            settings.focusSound = focusSoundSelect.value;
+            settings.defaultTime = parseInt(timeInput.value) || 25;
+            localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
+        }
+
+        function loadSettings() {
+            const savedSettings = localStorage.getItem('pomodoroSettings');
+            if (savedSettings) {
+                settings = JSON.parse(savedSettings);
+            }
+            
+            timeInput.value = settings.defaultTime;
+            alarmSoundSelect.value = settings.alarmSound;
+            focusSoundSelect.value = settings.focusSound;
+            darkModeToggle.checked = settings.darkMode;
+            
+            applyDarkMode(settings.darkMode);
+
+            timeLeft = settings.defaultTime * 60;
+            updateTimerDisplay();
+        }
+
+        function applyDarkMode(isDark) {
+            document.body.classList.toggle('dark', isDark);
+            document.body.classList.toggle('light', !isDark);
+            updateBackground(currentMode);
+        }
+
+        // Event Listeners
+        startFocusBtn.addEventListener('click', () => {
+            startTimer(parseInt(timeInput.value, 10), 'Focus');
+        });
+        startBreakBtn.addEventListener('click', () => {
+            startTimer(parseInt(timeInput.value, 10), 'Break');
+        });
+        stopBtn.addEventListener('click', () => stopTimer(false));
+
+        darkModeToggle.addEventListener('change', (e) => {
+            applyDarkMode(e.target.checked);
+            saveSettings();
+        });
+
+        alarmSoundSelect.addEventListener('change', saveSettings);
+        focusSoundSelect.addEventListener('change', saveSettings);
+
+        previewAlarmBtn.addEventListener('click', () => {
+            playAlarmSound(alarmSoundSelect.value);
+        });
+
+        let previewFocusTimeout;
+        previewFocusBtn.addEventListener('click', () => {
+             clearTimeout(previewFocusTimeout);
+             playFocusSound(focusSoundSelect.value);
+             previewFocusTimeout = setTimeout(stopFocusSound, 3000); // Preview for 3 seconds
+        });
+
+        document.addEventListener('DOMContentLoaded', loadSettings);
+    </script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then(registration => {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, err => {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+    }
+    </script>
+</body>
+</html>
