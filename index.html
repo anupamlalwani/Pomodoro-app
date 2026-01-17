@@ -43,6 +43,19 @@
         }
         input:focus, select:focus { border-color: #3b82f6; outline: none; }
         button:active { transform: scale(0.96); }
+        
+        /* Wake Lock Indicator */
+        #wake-lock-status {
+            position: fixed;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            opacity: 0.5;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
     </style>
 </head>
 <body class="p-4">
@@ -105,14 +118,52 @@
         </div>
     </div>
 
+    <!-- Hidden Wake Lock Status -->
+    <div id="wake-lock-status" class="hidden">
+        <span id="lock-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        Stay-awake active
+    </div>
+
     <script>
-        // --- PERSISTENT AUDIO CORE ---
+        // --- PERSISTENT AUDIO & WAKE CORE ---
         window.audioSystem = {
             ctx: null,
             master: null,
             nodes: [],
-            oceanBuffer: null
+            oceanBuffer: null,
+            wakeLock: null
         };
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    window.audioSystem.wakeLock = await navigator.wakeLock.request('screen');
+                    document.getElementById('wake-lock-status').classList.remove('hidden');
+                    console.log('Wake Lock acquired');
+                    
+                    window.audioSystem.wakeLock.addEventListener('release', () => {
+                        console.log('Wake Lock was released');
+                        document.getElementById('wake-lock-status').classList.add('hidden');
+                    });
+                } catch (err) {
+                    console.error(`${err.name}, ${err.message}`);
+                }
+            }
+        }
+
+        function releaseWakeLock() {
+            if (window.audioSystem.wakeLock !== null) {
+                window.audioSystem.wakeLock.release();
+                window.audioSystem.wakeLock = null;
+            }
+        }
+
+        // Re-acquire wake lock if user returns to tab
+        document.addEventListener('visibilitychange', async () => {
+            if (window.audioSystem.wakeLock !== null && document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        });
 
         function getCtx() {
             if (!window.audioSystem.ctx) {
@@ -126,7 +177,6 @@
             return window.audioSystem.ctx;
         }
 
-        // Generate high-fidelity noise for the infinite loop
         function getOceanBuffer(ctx) {
             if (window.audioSystem.oceanBuffer) return window.audioSystem.oceanBuffer;
             const bufferSize = 10 * ctx.sampleRate;
@@ -237,9 +287,9 @@
         const alarmSelect = document.getElementById('alarm-sound');
         const focusSelect = document.getElementById('focus-sound');
 
-        let ticker, running = false, left, mode = 'Ready';
+        let ticker, running = false, left, mode = 'Ready', endTime;
 
-        function tick() {
+        function updateDisplay() {
             const m = Math.floor(left / 60), s = left % 60;
             display.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
@@ -247,20 +297,40 @@
         function start(duration, m) {
             if (running) return;
             getCtx();
-            mode = m; left = duration * 60; running = true;
-            setBG(mode); modeLabel.textContent = mode; tick();
+            requestWakeLock(); // Request screen stay-awake
+            
+            mode = m; 
+            left = duration * 60; 
+            endTime = Date.now() + (left * 1000); // Precise end timestamp
+            running = true;
+            
+            setBG(mode); modeLabel.textContent = mode; updateDisplay();
             manual.classList.add('hidden'); active.classList.remove('hidden');
             if (mode === 'Focus') playFocus(focusSelect.value);
-            ticker = setInterval(() => { left--; tick(); if (left <= 0) end(true); }, 1000);
+
+            ticker = setInterval(() => {
+                const now = Date.now();
+                left = Math.ceil((endTime - now) / 1000);
+                
+                if (left <= 0) {
+                    left = 0;
+                    updateDisplay();
+                    end(true);
+                } else {
+                    updateDisplay();
+                }
+            }, 500); // Check every half-second for better visual precision
         }
 
         function end(isAlarm = false) {
             if (!running) return;
             clearInterval(ticker); running = false;
             stopFocus();
+            releaseWakeLock(); // Allow screen to sleep again
+            
             if (isAlarm) playAlarm(alarmSelect.value);
             mode = 'Ready'; setBG(mode); modeLabel.textContent = 'Ready'; 
-            left = (parseInt(input.value) || 25) * 60; tick();
+            left = (parseInt(input.value) || 25) * 60; updateDisplay();
             manual.classList.remove('hidden'); active.classList.add('hidden');
         }
 
@@ -275,7 +345,7 @@
             if (saved) {
                 const s = JSON.parse(saved);
                 input.value = s.time; alarmSelect.value = s.alarm; focusSelect.value = s.focus;
-                left = (parseInt(s.time) || 25) * 60; tick();
+                left = (parseInt(s.time) || 25) * 60; updateDisplay();
             }
         });
         const save = () => localStorage.setItem('pomSettings', JSON.stringify({
